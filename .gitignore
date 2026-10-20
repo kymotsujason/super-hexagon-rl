@@ -1,0 +1,24 @@
+# python environment and caches
+.venv/
+__pycache__/
+*.pyc
+
+# training runs, game instance folders, and logs (key checkpoints are copied into models/)
+runs/
+
+# build products
+*.o
+*.so
+decomp/generatewave-harness/harness
+decomp/generatewave-harness/out_*.txt
+decomp/generatewave-harness/gw.asm
+
+# your own Ghidra exports of the game's functions, which are the game's code and stay local
+decomp/*.c
+decomp/generatewave-harness/gw.c
+
+# generated from decomp/ and the game binary by make -C sim
+sim/gen/
+
+# a dump of the game's memory, rebuilt by scripts/check_sim.py
+sim/initial_state.*

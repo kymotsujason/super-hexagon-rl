@@ -1,0 +1,11 @@
+# superhex byte ranges check_sim.py doesn't compare, as hex start-end, inclusive
+# graphicsclass colour tables, which the simulator's setpal doesn't fill
+e5a8-e70f
+# musicclass song data vector, three pointers into the game's heap
+1e4a8-1e4bf
+# sound player objects inside musicclass (music at +0x1d4e0, effects at +0x1d660)
+3b988-3bf07
+# music start time for the loop restart, taken from the clock
+3bf20-3bf27
+# elapsed milliseconds, counted from a different clock base in each process
+3c710-3c717

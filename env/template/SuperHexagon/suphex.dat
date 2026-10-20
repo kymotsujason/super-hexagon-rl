@@ -1,0 +1,27 @@
+<VARIABLES>
+    <besttime0>0</besttime0>
+    <besttime1>0</besttime1>
+    <besttime2>0</besttime2>
+    <besttime3>0</besttime3>
+    <besttime4>0</besttime4>
+    <besttime5>0</besttime5>
+    <besttimeD0>0</besttimeD0>
+    <besttimeD1>0</besttimeD1>
+    <besttimeD2>0</besttimeD2>
+    <besttimeD3>0</besttimeD3>
+    <besttimeD4>0</besttimeD4>
+    <besttimeD5>0</besttimeD5>
+    <unlockedhyper0>1</unlockedhyper0>
+    <unlockedhyper1>1</unlockedhyper1>
+    <unlockedhyper2>1</unlockedhyper2>
+    <finishedhyper0>0</finishedhyper0>
+    <finishedhyper1>0</finishedhyper1>
+    <finishedhyper2>0</finishedhyper2>
+    <tutorialflag>1</tutorialflag>
+</VARIABLES>
+<GAMESETTING>
+    <SETUP>0</SETUP>
+    <FLASHCHECK>0</FLASHCHECK>
+    <SYNC>0</SYNC>
+    <BADCHECK>0</BADCHECK>
+</GAMESETTING>
