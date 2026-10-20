@@ -175,7 +175,7 @@ class ShxGame:
             os.close(fd)
 
         self.shared = ShxShared.from_buffer(self._map)
-        # the hook writes the 44 value observation here after every command
+        # the hook writes the 45 value observation here after every command
         self.obs = np.frombuffer(self._map, dtype=np.float32, count=OBS_SIZE, offset=ShxShared.obs.offset)
         base = ctypes.addressof(self.shared)
         self._command_sem = base + ShxShared.command_ready.offset

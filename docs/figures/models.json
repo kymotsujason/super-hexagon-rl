@@ -1,0 +1,51 @@
+[
+  {
+    "name": "game-trained",
+    "reached": 325,
+    "of": 360,
+    "presses": 8.46,
+    "hold_ms": 76
+  },
+  {
+    "name": "sim-tuned",
+    "reached": 357,
+    "of": 360,
+    "presses": 6.11,
+    "hold_ms": 81
+  },
+  {
+    "name": "no-flips",
+    "reached": 350,
+    "of": 360,
+    "presses": 4.25,
+    "hold_ms": 90
+  },
+  {
+    "name": "smooth-b2",
+    "reached": 343,
+    "of": 360,
+    "presses": 1.48,
+    "hold_ms": 255
+  },
+  {
+    "name": "smooth-avg-b5b6",
+    "reached": 342,
+    "of": 360,
+    "presses": 1.39,
+    "hold_ms": 271
+  },
+  {
+    "name": "smooth-avg-b7",
+    "reached": 348,
+    "of": 360,
+    "presses": 1.21,
+    "hold_ms": 332
+  },
+  {
+    "name": "smooth-hold-ema",
+    "reached": 349,
+    "of": 360,
+    "presses": 1.19,
+    "hold_ms": 340
+  }
+]

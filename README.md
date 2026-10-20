@@ -1,63 +1,55 @@
-# Super Hexagon reinforcement learning
+# Super Hexagon RL
 
-A reinforcement learning agent that plays Super Hexagon, Terry Cavanagh's game, on the native
-Linux build. It reads the game's state from memory instead of the screen, trains with PPO in a C
-simulator compiled from the game's own decompiled logic, and then plays the real game, either in
-lockstep or live in real time with real key events.
+A self learning agent for Super Hexagon. It reads the game's state from memory, trains with PPO in
+a C simulator compiled from the game's own logic, and plays the real game in real time with real
+key presses.
 
 ![Six live games, one per level, played by the agent](docs/live-grid.png)
 
 ## Results
 
-Every count below is runs that reached a 600 s cap, with 20 seeded episodes per level across all
-six levels (Hexagon through Hyper Hexagonest).
-
-| Model | Real game | Three seed sets | Presses/s | Mean hold |
+| Model | Real game | Simulator | Presses a second | Mean hold |
 |---|---|---|---|---|
-| `models/sim-tuned.pt` | 120 of 120 | 240 of 240 (two sets) | 5.7 to 6.1 | 81 to 85 ms |
-| `models/smooth-hold-ema.pt` | 116 of 120 | 349 of 360 | 1.19 | 340 ms |
+| `smooth-hold-ema` | 116 of 120 | 349 of 360 | 1.19 | 340 ms |
+| `sim-tuned` | 120 of 120 | 357 of 360 | 6.11 | 81 ms |
 
-`sim-tuned.pt` survives the most, but it taps about six times a second. `smooth-hold-ema.pt` holds
-keys the way a person would, and it's the one to watch. The seed set counts were played in the
-simulator, which matched the real game episode for episode each time it was checked, and the real
-game column is the first seed set played in the actual game.
+Each count is runs that lasted the full 600 s, with 20 seeded runs per level on all six levels.
+The real game column is one seed set, and the simulator column is three seed sets, played in a
+simulator that matched the real game episode for episode each time it was checked. `sim-tuned` survives most but taps six times a
+second, while `smooth-hold-ema` holds keys the way a person would.
 
-![The same 15 seconds of Hexagoner played by both models](docs/movement-comparison.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/tradeoff-dark.svg">
+  <img alt="Runs reaching 600 s against key presses per second for seven models" src="docs/figures/tradeoff-light.svg">
+</picture>
 
-Played live, with the game running on its own clock and the agent sending key events,
-`smooth-hold-ema.pt` reached the cap in 22 of 25 runs, and 31,774 of its 31,777 key changes reached
-the game in time for the next tick. All three losses were early in Hyper Hexagonest, which
-`docs/live-play.md` looks into.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/movement-dark.svg">
+  <img alt="The player's angle and held keys over 15 s for sim-tuned and smooth-hold-ema" src="docs/figures/movement-light.svg">
+</picture>
+
+Played live on the game's own clock, `smooth-hold-ema` reached 600 s in 22 of 25 runs. The three
+losses came from keys the game dropped when a window changed focus, which `play_live.py` now
+catches, and it has lasted all 48 short runs since.
 
 ## How it works
 
-- `hook/` is an `LD_PRELOAD` library for the game. It can take over the game's loop and step it
-  one 1/60 s tick at a time in lockstep with the agent, reading the state from memory and writing
-  key state directly. It also replaces the Steam API with local fakes, so scores and achievements
-  are never uploaded.
-- `sim/` compiles the game's own gameplay functions, exported from Ghidra, into a library that runs
-  hundreds of games at once in one process. It starts from a dump of the real game's state and ran about
-  four times faster than the real game pipeline (467,000 against 122,000 agent steps a second).
-- The observation is 45 numbers: for each of the six slots around the player, the time until the
-  nearest two walls arrive and how long they take to pass, plus the player's position within its
-  slot, the side count, wall speed, level, last action, and how long that action has been held.
-- `scripts/train_ppo.py` is a plain PPO with separate 256 unit actor and critic networks, a
-  decision every 2 ticks (30 a second), gamma 0.995, and a reward of -1 on death. Small costs on
-  each new key press and on straight left to right reversals teach it to hold keys, and a running
-  average of the weights during training gives the final policy.
-- `scripts/play_live.py` plays the real game live. The game runs on its own real time clock, the
-  agent reads memory through `/proc`, and key events go straight to the game's window.
+- `hook/` is an `LD_PRELOAD` library that steps the game one tick at a time in lockstep with the
+  agent, reads its state from memory, and fakes Steam so score uploads stay off.
+- `sim/` compiles the game's gameplay functions, exported from Ghidra, into a library that runs
+  hundreds of games at once, about four times faster than the real game.
+- The agent sees 45 numbers, covering when the nearest walls in each of the six slots arrive and
+  how long they last, its place in its slot, the side count, wall speed, level, and its last key
+  and how long it's been held.
+- `scripts/train_ppo.py` is a plain PPO with 256 unit actor and critic networks, 30 decisions a
+  second, and a reward of -1 on death. Small costs on each new press and on reversals teach it to
+  hold keys.
 
-## Requirements
+## Quick start
 
-- Super Hexagon from Steam on Linux, as the native build (depot 221643) with Proton turned off for
-  it. The hook uses fixed addresses, so the scripts check that the binary's SHA-256 is
-  `6f13c58d136b84df212cc23a560f7383e2f689005af18072e51d8a7439d2ba1d` and refuse anything else.
-- gcc, make, and Python 3.12 (the version it was built and tested with).
-- The system SDL2 (`sdl2-compat`) for headless games, and an X11 or Xwayland session for windows
-  and live play (`xdotool` finds the window).
-
-## Setup
+You'll need Super Hexagon on Steam as the native Linux build, gcc, Python 3.12, the system SDL2
+(`sdl2-compat`), and an X11 or Xwayland session. The hook uses fixed addresses, so the scripts
+refuse any binary whose SHA-256 isn't `6f13c58d136b84df212cc23a560f7383e2f689005af18072e51d8a7439d2ba1d`.
 
 ```bash
 python3 -m venv .venv
@@ -71,9 +63,26 @@ python3 -m venv .venv
 make -C hook
 ```
 
-That's enough to evaluate and watch the models in the real game. Building the simulator needs your
-own Ghidra export of the game's functions, which `decomp/README.md` explains. With those in
-`decomp/`, build it and write the starting state it needs (this also checks it against the game):
+Watch the agent play a minute of Hexagoner:
+
+```bash
+.venv/bin/python scripts/eval_policy.py models/smooth-hold-ema.pt --watch --levels 1 --episodes 1 --max-seconds 60
+```
+
+Play live on the game's own clock (`--sound 2` adds music at volume 2 of 10):
+
+```bash
+.venv/bin/python scripts/play_live.py models/smooth-hold-ema.pt --levels 1 --episodes 1 --max-seconds 120 --sound 2
+```
+
+Run the standard evaluation, 20 seeded runs per level with a 600 s cap:
+
+```bash
+.venv/bin/python scripts/eval_policy.py models/smooth-hold-ema.pt --levels 0 1 2 3 4 5 --episodes 20 --max-seconds 600
+```
+
+Training and the fast evaluation (`scripts/eval_batch.py`) need the simulator, which you build from
+your own Ghidra export of the game, as `decomp/README.md` explains. Then:
 
 ```bash
 make -C sim
@@ -83,67 +92,22 @@ make -C sim
 .venv/bin/python scripts/check_sim.py
 ```
 
-## Usage
-
-Watch a model play a minute of Hexagoner in a window, in lockstep:
-
-```bash
-.venv/bin/python scripts/eval_policy.py models/smooth-hold-ema.pt --watch --levels 1 --episodes 1 --max-seconds 60
-```
-
-Play live, with the game on its own clock (add `--sound` for music and sound effects at full volume,
-or `--sound 2` for a volume of 2 out of 10):
-
-```bash
-.venv/bin/python scripts/play_live.py models/smooth-hold-ema.pt --levels 1 --episodes 1 --max-seconds 120
-```
-
-Run the standard evaluation (20 seeded episodes per level, 600 s cap) in the real game, headless:
-
-```bash
-.venv/bin/python scripts/eval_policy.py models/smooth-hold-ema.pt --levels 0 1 2 3 4 5 --episodes 20 --max-seconds 600
-```
-
-Run the same evaluation in the simulator, all episodes at once:
-
-```bash
-.venv/bin/python scripts/eval_batch.py models/smooth-hold-ema.pt --seed 12345
-```
-
-Train in the simulator, starting from a checkpoint:
-
 ```bash
 .venv/bin/python scripts/train_ppo.py --backend sim --run-name example --init-model models/smooth-hold-ema.pt --lr 1e-4 --press-cost 0.0008 --reversal-cost 0.003 --level-target-seconds 600 --max-minutes 30 --snapshot-minutes 10
 ```
 
-Training runs, game instances, and logs go under `runs/`.
-
-## Layout
-
-| Folder | Contents |
-|---|---|
-| `hook/` | Preload library, shared memory protocol, shared game driving code |
-| `sim/` | Simulator runtime, converter tools, and build files |
-| `env/` | Python game clients, Gymnasium env, vector envs, starting save |
-| `scripts/` | Training, evaluation, live play, checks, and benchmarks |
-| `decomp/` | Reverse engineering notes on the game's internals |
-| `docs/` | Design notes, training logs, and results |
-| `models/` | Trained checkpoints, described in `models/README.md` |
-
 ## Docs
 
-- `docs/stage1-hook-plan.md` designs the lockstep hook and measures its speed.
+- `docs/hook.md` covers the hook, the lockstep protocol, and the observation.
 - `docs/simulator.md` covers the simulator and how it was checked against the game.
-- `docs/training-log.md` has the first training runs and evaluations.
-- `docs/overnight-log.md` covers the work towards smooth, held movement.
-- `docs/hold-anneal-log.md` tests a hold time input, press cost annealing, and weight averaging.
-- `docs/live-play.md` covers live play, latency, and what's still open.
+- `docs/training.md` covers every training run, what worked, and what didn't.
+- `docs/live-play.md` covers live play, latency, and the dropped key fix.
+- `models/README.md` lists every checkpoint, and `decomp/README.md` the reverse engineering notes.
+- `scripts/plot_figures.py` draws the figures above from `docs/figures/models.json`.
 
 ## Notes
 
-This project isn't affiliated with Terry Cavanagh. It doesn't include the game, its code, or its
-data, so you need your own copy. The decompiled functions, the generated simulator sources, and
-the state dump all stay on your machine, and `.gitignore` keeps them out of git. Each game
-instance saves into its own folder under `runs/`, so your own save and scores aren't touched.
-
-The code is under the MIT license, in `LICENSE`.
+This project isn't affiliated with Terry Cavanagh, and it doesn't include the game, its code, or
+its data. The decompiled functions, generated simulator sources, and state dumps stay on your
+machine, and each game instance saves into its own folder under `runs/`, so your own save isn't
+touched. The code is MIT licensed.

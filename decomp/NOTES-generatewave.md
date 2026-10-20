@@ -1,12 +1,12 @@
 # Notes on gameclass::generatewave(int)
 
-Source analyzed: `gameclass_generatewave.c` (21,014 lines, Ghidra output, function at `0x421bc0`). Line numbers below refer to that file unless another file is named. Each claim is tagged as observed (read in the decomp, the disassembly, or harness output) or inferred.
+Source analyzed: `gameclass_generatewave.c` (21,014 lines, Ghidra output, function at `0x421bc0`). Line numbers below refer to that file unless another file is named. Claims are tagged observed (read in the decomp, the disassembly, or harness output) or inferred.
 
 ## Method
 
-I read the dispatch and a sample of cases by hand, then compiled an unmodified copy of the decompiled function into a test harness to enumerate every outcome. The copy only renames `this` to `self`, swaps the C++ header for a C one, and adds typedefs (`gameclass` as `unsigned char`, `undefined4` as `uint32_t`). The harness stubs `ofRandom(x)` with a depth-first enumerator that returns `choice + 0.5` and records the range `x`, and it reimplements `addenemy` from `gameclass_addenemy.c`. It then runs every id from 0 to 2000 and dumps the wall array and the touched fields after each call.
+An unmodified copy of the decompiled function was compiled into a test harness to enumerate every outcome. The copy only renames `this` to `self`, swaps the C++ header for a C one, and adds typedefs (`gameclass` as `unsigned char`, `undefined4` as `uint32_t`). The harness stubs `ofRandom(x)` with a depth-first enumerator that returns `choice + 0.5` and records the range `x`, and it reimplements `addenemy` from `gameclass_addenemy.c`. It runs every id from 0 to 2000 and dumps the wall array and the touched fields after each call.
 
-The harness lives at `/tmp/shx/gw/` (`harness.c`, `gw.c`, `summarize.py`, and `out_<ID>.txt` per id). That folder is in `/tmp`, so copy it somewhere permanent if it's needed later. Build and run it with these commands:
+The harness lived at `/tmp/shx/gw/` (`harness.c`, `gw.c`, `summarize.py`, and `out_<ID>.txt` per id) and isn't kept in the repository. It was built and run with these commands:
 
 ```bash
 cd /tmp/shx/gw
@@ -16,7 +16,7 @@ gcc -O1 -o harness harness.c gw.c
 python3 summarize.py
 ```
 
-The harness measures Ghidra's decompilation, not the shipped machine code. To check it against the binary I compared the list of case constants with the disassembly (`objdump -d` of `0x421bc0`, every `cmp $X,%esi`) and hand checked case 600 instruction by instruction. Both matched. The remaining ids haven't been checked against the machine code.
+The harness measures Ghidra's decompilation, not the shipped machine code. The list of case constants matches the disassembly (`objdump -d` of `0x421bc0`, every `cmp $X,%esi`), and case 600 was checked instruction by instruction. The remaining ids haven't been checked against the machine code.
 
 ## Overall structure
 
@@ -34,7 +34,7 @@ The handled ids, grouped by family, are as follows:
 
 The caller passes `0x195` (405) for the 3-sided transition (`superhex_gamelogic.c` line 1295), but generatewave has no case for it (observed in both the harness scan and the disassembly case list). That call takes the default path, spawns nothing, and leaves the wave timer at the 0 the caller just wrote, so a new wave gets picked on the next frame.
 
-generatewave doesn't choose the pattern itself. It never reads the level, the side count (`gameclass+0xfc`), or the survival time (observed, the only fields it reads are listed under state written below). The side count is baked into the id, since the 5, 4, and 3 sided families use `% 5`, `% 4`, and `% 3` on their slot math in place of `% 6` (191 uses of `% 6`, 25 of `% 5`, 26 of `% 4`, 12 of `% 3`).
+generatewave doesn't choose the pattern itself. It never reads the level, the side count (`gameclass+0xfc`), or the survival time (observed). The side count is baked into the id, since the 5, 4, and 3 sided families use `% 5`, `% 4`, and `% 3` on their slot math in place of `% 6` (191 uses of `% 6`, 25 of `% 5`, 26 of `% 4`, 12 of `% 3`).
 
 ## Who picks the id
 
@@ -51,7 +51,7 @@ generatewave doesn't choose the pattern itself. It never reads the level, the si
 | `0x545c` | `0x5474` | resume flag |
 | `0x5608` | `0x5620` | stage 4 clock |
 
-The wave counter drives the structure (opening wave at counter 0, `0x5a` for stage 0 at line 1151 and `0x5b` for stage 1 at line 1413, filler `200` for early waves, then `ofRandom(100)` and `ofRandom(N)` rolls into the pattern ids, lines 1094 to 1330 for stage 0). Mirror pairs are chosen in the caller with `ofRandom(100) < 51` (for example `0x6e` versus `0x6d` at lines 823 to 828). Survival time above 3600 widens some rolls from `ofRandom(5)` to `ofRandom(6)`, and speed at or above 26.0 swaps `0x69` for `0x6c` (lines 1203 to 1212). Side count picks the 300, 400, and 500 families (lines 1223 to 1324). The stage index 4 branch picks pattern pools by a 64-bit time difference (`superhex+0x3c710` minus `superhex+0x5628`, line 588) compared against thresholds from 24,500 up to 168,000, which looks like a millisecond clock (inferred). I didn't trace the caller fully, so treat this section as a summary.
+The wave counter drives the structure (opening wave at counter 0, `0x5a` for stage 0 at line 1151 and `0x5b` for stage 1 at line 1413, filler `200` for early waves, then `ofRandom(100)` and `ofRandom(N)` rolls into the pattern ids, lines 1094 to 1330 for stage 0). Mirror pairs are chosen in the caller with `ofRandom(100) < 51` (for example `0x6e` versus `0x6d` at lines 823 to 828). Survival time above 3600 widens some rolls from `ofRandom(5)` to `ofRandom(6)`, and speed at or above 26.0 swaps `0x69` for `0x6c` (lines 1203 to 1212). Side count picks the 300, 400, and 500 families (lines 1223 to 1324). The stage index 4 branch picks pattern pools by a 64-bit time difference (`superhex+0x3c710` minus `superhex+0x5628`, line 588) compared against thresholds from 24,500 up to 168,000, which looks like a millisecond clock (inferred). The caller wasn't traced fully, so treat this section as a summary.
 
 ## Pattern shapes
 
@@ -200,34 +200,23 @@ generatewave doesn't change sides, rotation, or speed directly (observed, no wri
 
 ## Timing and determinism
 
-Inside generatewave the only float timing dependency is the delay rescale by wall speed (`gameclass+0x28c0`), which the caller grows by the frame delta each wave (`superhex_gamelogic.c` lines 1100 to 1116). Wall slots, distances, and widths are integer constants plus random integers, so they're exact. The caller adds more timing dependencies that a sim has to copy:
+Inside generatewave the only float timing dependency is the delay rescale by wall speed (`gameclass+0x28c0`), which the caller grows by the frame delta each wave (`superhex_gamelogic.c` lines 1100 to 1116). Wall slots, distances, and widths are integer constants plus random integers, so they're exact. The caller adds more timing dependencies that a simulator has to copy:
 
 - The wave timer is a float decremented by a double frame delta and clamped to 0 before the new delay is set, so overshoot is thrown away and spawns land on frame boundaries.
 - Wall distances are ints updated as `(int)(dist - speed * delta)` each frame (`superhex_gamelogic.c` line 380), so truncation accumulates per frame.
 - Speed and survival time thresholds (26.0, 3600, 7200) gate pattern choice.
-- Stage index 4 selects pools by what looks like a millisecond clock (line 588), which would be wall time and not frame count (inferred, the writer of `superhex+0x3c710` isn't in these decomps).
+- Stage index 4 selects pools by what looks like a millisecond clock (line 588), which would be wall time and not frame count (inferred).
 
 With a fixed frame delta and a known rand stream, everything generatewave does is deterministic.
 
 ## Hand written or table driven
 
-The code looks hand written per pattern, with GCC inlining `addenemy` (inferred). The evidence is as follows:
+The code looks hand written per pattern, with GCC inlining `addenemy` (inferred). Only 55 out of line `addenemy(` calls remain, all between lines 3952 and 4497 (id 0 and the opening family), and the rest are 647 inlined copies of the free slot search followed by five field stores. Offsets like `+7` and `+8` survive in the slot math (line 1589), mirror patterns are separate cases, the 5, 4, and 3 sided families are separate copies with their own modulus, and delays and widths are irregular per case (220, 240, 350, widths like 610 and 910 in 0x6a). The opening family also reuses a member field as a local offset.
 
-- Only 55 out of line `addenemy(` calls remain, all between lines 3952 and 4497 (id 0 and the opening family), and the rest are 647 inlined copies of the free slot search followed by five field stores.
-- Offsets like `+7` and `+8` survive in the slot math (line 1589), which a table generator would normalize.
-- Mirror patterns are separate cases, not a flag.
-- The 5, 4, and 3 sided families are separate copies with their own modulus.
-- Delays and widths are irregular per case (220, 240, 350, widths like 610 and 910 in 0x6a).
-- The opening family reuses a member field as a local offset, which is a typical shortcut in hand written code.
-
-Parsing the decompiled text is a poor way to transcribe it, since most writes are inlined into slot search loops and cases share tails through gotos (27 gotos into the shared tails `LAB_00425c3b`, `LAB_00427030`, and `LAB_0042703b` alone). The harness approach above is the mechanical route. It runs each id with every combination of draws and writes a table keyed by (id, draw path) with the ordered wall list and the base delay. The whole game fits in 3,053 rows, and a C sim would store, per id, a small tree of draw ranges (the range of a later draw can depend on an earlier result, as in ids 201 and 501) with a wall list at each leaf. At runtime it would make the same `ofRandom` calls with the exact float math, walk the tree, emit the walls, and apply `delay = base * 20 / speed`.
-
-Before trusting that table, the next step would be to run the same enumeration against the real machine code in place of Ghidra's C. That means emulating `0x421bc0` (for example with Unicorn, which isn't installed here) or calling it under gdb, with `ofRandom` at `0x486720` hooked, then diffing against the harness output. Case 600 and the case list match so far, and the other 44 cases haven't been checked against the binary.
+Parsing the decompiled text is a poor way to transcribe it, since most writes are inlined into slot search loops and cases share tails through gotos (27 gotos into the shared tails `LAB_00425c3b`, `LAB_00427030`, and `LAB_0042703b` alone). The harness approach enumerates each id with every combination of draws and writes a table keyed by (id, draw path) with the ordered wall list and the base delay. The whole game fits in 3,053 rows. A C implementation stores, per id, a small tree of draw ranges (the range of a later draw can depend on an earlier result, as in ids 201 and 501) with a wall list at each leaf, makes the same `ofRandom` calls with the exact float math, walks the tree, emits the walls, and applies `delay = base * 20 / speed`. The C simulator (`docs/simulator.md`) instead compiles the decompiled function directly.
 
 ## Open items
 
-- The 0x195 call that spawns nothing is either a bug in the game or a misread of the caller, and it's worth confirming in the disassembly of `superhex::gamelogic` near the call.
+- The 0x195 call that spawns nothing is either a bug in the game or a misread of the caller. Confirm it in the disassembly of `superhex::gamelogic` near the call.
 - What reads `gameclass+0x53e4` and `gameclass+0x53e0` (likely graphics or rotation code not in this folder).
-- What `getExpectedFrameDelta()` returns (likely 1.0 at the target frame rate, unverified), which sets the time unit of the delays.
-- The writer of `superhex+0x3c710` for the stage 4 clock.
 - `addenemy` has no capacity check against the 500 record array (observed in `gameclass_addenemy.c`), so the count can in principle run past 500.

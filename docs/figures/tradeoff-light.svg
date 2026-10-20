@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" width="960" height="560" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Helvetica, Arial, sans-serif">
+<rect x="0.5" y="0.5" width="959" height="559" rx="18" fill="#fcfcfb" stroke="rgba(11,11,11,0.10)"/>
+<text x="40.0" y="54.0" font-size="22" font-weight="600" fill="#0b0b0b" text-anchor="start">Smooth play without giving up survival</text>
+<text x="40.0" y="80.0" font-size="13.5" font-weight="400" fill="#52514e" text-anchor="start">Seven models, each on 360 seeded runs in the simulator. The line follows the order they were trained in.</text>
+<text x="96.0" y="114.0" font-size="12.5" font-weight="400" fill="#898781" text-anchor="start">Runs reaching the 600 s cap</text>
+<line x1="96" y1="413.7" x2="920" y2="413.7" stroke="#e1e0d9" stroke-width="1"/>
+<text x="84.0" y="417.7" font-size="12" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric: tabular-nums">90%</text>
+<line x1="96" y1="272.8" x2="920" y2="272.8" stroke="#e1e0d9" stroke-width="1"/>
+<text x="84.0" y="276.8" font-size="12" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric: tabular-nums">95%</text>
+<line x1="96" y1="132.0" x2="920" y2="132.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="84.0" y="136.0" font-size="12" font-weight="400" fill="#898781" text-anchor="end" style="font-variant-numeric: tabular-nums">100%</text>
+<line x1="96" y1="470" x2="920" y2="470" stroke="#c3c2b7" stroke-width="1"/>
+<text x="96.0" y="492.0" font-size="12" font-weight="400" fill="#898781" text-anchor="middle" style="font-variant-numeric: tabular-nums">0</text>
+<text x="279.1" y="492.0" font-size="12" font-weight="400" fill="#898781" text-anchor="middle" style="font-variant-numeric: tabular-nums">2</text>
+<text x="462.2" y="492.0" font-size="12" font-weight="400" fill="#898781" text-anchor="middle" style="font-variant-numeric: tabular-nums">4</text>
+<text x="645.3" y="492.0" font-size="12" font-weight="400" fill="#898781" text-anchor="middle" style="font-variant-numeric: tabular-nums">6</text>
+<text x="828.4" y="492.0" font-size="12" font-weight="400" fill="#898781" text-anchor="middle" style="font-variant-numeric: tabular-nums">8</text>
+<text x="508.0" y="520.0" font-size="12.5" font-weight="400" fill="#898781" text-anchor="middle">Key presses per second, fewer is smoother</text>
+<polyline points="870.6,405.8 655.4,155.5 485.1,210.2 231.5,265.0 223.3,272.8 206.8,225.9 205.0,218.1" fill="none" stroke="#d9d8d1" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="870.6" cy="405.8" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="655.4" cy="155.5" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="485.1" cy="210.2" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="231.5" cy="265.0" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="223.3" cy="272.8" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="206.8" cy="225.9" r="5" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="205.0" cy="218.1" r="7.5" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2.5"/>
+<text x="858.6" y="409.8" font-size="12.5" font-weight="400" fill="#52514e" text-anchor="end">game-trained</text>
+<text x="655.4" y="141.5" font-size="12.5" font-weight="400" fill="#52514e" text-anchor="middle">sim-tuned</text>
+<text x="485.1" y="196.2" font-size="12.5" font-weight="400" fill="#52514e" text-anchor="middle">no-flips</text>
+<text x="245.5" y="272.9" font-size="12.5" font-weight="400" fill="#52514e" text-anchor="start">earlier smooth models</text>
+<text x="221.0" y="192.1" font-size="14" font-weight="600" fill="#0b0b0b" text-anchor="start">smooth-hold-ema</text>
+<text x="221.0" y="209.1" font-size="12.5" font-weight="400" fill="#52514e" text-anchor="start">1.19 presses a second, 349 of 360 runs</text>
+<text x="221.0" y="226.1" font-size="11.5" font-weight="400" fill="#898781" text-anchor="start">smooth-avg-b7 sits just under it</text>
+</svg>

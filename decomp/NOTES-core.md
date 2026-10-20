@@ -4,7 +4,7 @@ Target is the native Linux build, `SuperHexagon` with SHA-256
 `6f13c58d136b84df212cc23a560f7383e2f689005af18072e51d8a7439d2ba1d` (Steam depot 221643, buildid
 8838351). It's an x86-64 ELF, not stripped, type `EXEC` (not position independent), so the
 addresses below are fixed. Everything here comes from Ghidra 12.1.2 pseudocode through REA and from
-`objdump` and `nm`, so it's static analysis only. Nothing has been run yet.
+`objdump` and `nm`.
 
 ## Objects
 
@@ -51,15 +51,18 @@ while (running) {
 
 `superhex::update` (0x47a440) runs `calculateTime`, `gameinput`, `gamelogic`, and
 `musicclass::processmusic` in that order. `calculateTime` (0x470c20) turns the frame time into a
-time scale at `+0x28c0` (double, `dt / (1/60)` rounded to 0.1). Since the loop always hands
-`update` exactly one period, the scale is 1.0 on every tick at the default 60 fps. Game logic
-multiplies its per tick changes by this value, so the logic advances in fixed steps no matter how
-fast real time runs.
+time scale at `+0x28c0` (double, `dt / (1/60)` rounded to 0.1). Game logic multiplies its per tick
+changes by this value. The loop sets `window+200` to `period / freq` right before each `update`
+and can run several updates before one `display`, so `update` always sees exactly one period. With
+a counter frequency of 1,000,000,000 (normal on Linux) the period is 16,666,666 ticks, the frame
+time is 0.016666666 s, and the scale is 1.0 on every tick at 60 fps. The hook sets the same value.
+`NOTES-input.md` describes `calculateTime` using the measured frame time, which holds only when
+looking at `update` alone.
 
 `superhex::draw` (0x47a540) stores `ofGetElapsedTimeMillis()` (real `SDL_GetTicks` minus the
-start time) at `+0x3c710` before rendering. `gamelogic` reads `+0x3c710 - +0x5628` to script
-wall speed and rotation phases in stage mode 4. It also uses `ofGetElapsedTimeMillis` for the
-music loop and the beat value at `+0x2924`, which feeds the visual pulse at `+0x2928`.
+start time) at `+0x3c710`. `gamelogic` reads `+0x3c710 - +0x5628` to script wall speed and
+rotation phases in stage mode 4, and uses `ofGetElapsedTimeMillis` for the music loop and the
+beat value at `+0x2924`, which feeds the visual pulse at `+0x2928`.
 
 ## Random numbers
 
@@ -67,8 +70,7 @@ music loop and the beat value at `+0x2924`, which feeds the visual pulse at `+0x
 `srand` isn't imported at all. `objdump` shows `rand@plt` called only from `ofRandom`, and
 `ofRandom` called only from `gamelogic` (72 sites), `generatewave` (68), `gameinput` (9),
 `musicclass::play` (3), and `gameclass::changetostage` (2). Neither `lib64/libSDL2-2.0.so.0` nor
-`lib64/libsteam_api.so` imports `rand`. So rendering doesn't consume random numbers, and
-replacing `rand` in a preload library gives full control of the stream.
+`lib64/libsteam_api.so` imports `rand`, so rendering doesn't consume random numbers.
 
 ## Walls
 
@@ -112,21 +114,12 @@ shrinks by the same amount until the record is disabled.
 The collision test in `gamelogic` looks at enabled walls in the player's slot with distance at or
 under 150. If the wall's inner edge is between `145 - speed` and 150 the player is hit. If the edge
 has already passed and the wall is long (width over 199), the move is treated as a side hit and
-the angle goes back to the previous value. My reading of the rest of that branch (lines 327 to 340
-of `superhex_gamelogic.c`) is that the player then dies only if a wall also blocks the restored
-slot, but the condition mixes in the first wall's distance, so the simulator should confirm it
-against traces. On a hit with the death timer at 0, `gamelogic` plays the death sound, sets the
-death timer to 1.0, and clears `+0x28e0`.
-
-`NOTES-input.md` reads `calculateTime` as using the measured frame time, and says input and logic
-run once per rendered frame. Both statements look at `update` alone. The caller at 0x4889c0 sets
-`window+200` to `period / freq` right before each `update` and can run several updates before one
-`display`, so the frame time `update` sees is always one period. With a counter frequency of
-1,000,000,000 (normal on Linux) the period is 16,666,666 ticks, the frame time is 0.016666666 s,
-and the rounded time scale is 1.0. The hook sets the same value, so this holds under the hook too.
+the angle goes back to the previous value. In the rest of that branch (lines 327 to 340 of
+`superhex_gamelogic.c`) the player likely dies only if a wall also blocks the restored slot
+(inferred), but the condition mixes in the first wall's distance. On a hit with the death timer at 0,
+`gamelogic` plays the death sound, sets the death timer to 1.0, and clears `+0x28e0`.
 
 ## Open questions
 
 - Which code writes `+0x5628`, the start time that the mode 4 script subtracts.
 - Whether the beat pulse at `+0x2928` affects anything besides drawing.
-- How the player angle moves per tick (being traced in `gameinput`, see `NOTES-input.md`).

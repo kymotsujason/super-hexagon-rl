@@ -1,8 +1,8 @@
 # Input path notes for Super Hexagon (Linux x86-64)
 
-Sources are the Ghidra exports in this folder. Line numbers refer to those files. A few facts were also checked against the shipped binary at `~/.local/share/Steam/steamapps/common/Super Hexagon/SuperHexagon` with `objdump` and `nm`, and those are marked "(asm)". Each claim is tagged as either observed (read straight from code) or inferred (my reading of what the code is for).
+Sources are the Ghidra exports in this folder, and line numbers refer to those files. A few facts were also checked against the shipped binary with `objdump` and `nm`, marked "(asm)". Each claim is tagged as observed (read straight from code) or inferred (a reading of what the code is for).
 
-All offsets below are from the `superhex` object (`this` in every `superhex::` method) unless written as `gc+X`, which means offset X inside the embedded gameclass.
+All offsets are from the `superhex` object (`this` in every `superhex::` method) unless written as `gc+X`, which means offset X inside the embedded gameclass.
 
 ## Embedded objects
 
@@ -16,11 +16,11 @@ All offsets below are from the `superhex` object (`this` in every `superhex::` m
 | deviceclass | `0x3bfa8` | `superhex_prepareGame.c` 14 |
 | key state `bool[1000]` | `0x3c07c` | `superhex_keyPressed.c` 7 |
 
-Observed. The gameclass offset is confirmed three ways. `setup` passes `this+0x18` to `gameclass::start` and `gameclass::savesettings`. Every `gameclass::` call in gameinput passes `this+0x18`. `gameclass::restart` writes the frame delta double at `gc+0x28a8`, and gameinput reads that same double at `superhex+0x28c0` (0x18 + 0x28a8).
+Observed. The gameclass offset is confirmed three ways. `setup` passes `this+0x18` to `gameclass::start` and `gameclass::savesettings`, every `gameclass::` call in gameinput passes `this+0x18`, and `gameclass::restart` writes the frame delta double at `gc+0x28a8` while gameinput reads it at `superhex+0x28c0` (0x18 + 0x28a8).
 
-Inferred. scoreclass at `0x57f0` sits between gameclass and graphicsclass, so it's probably a member of gameclass (`gc+0x57d8`) and not a separate superhex member. The key array is likely exactly 1000 bytes, since the next field (`0x3c464`, touch state) is at `0x3c07c + 0x3e8`.
+Inferred. scoreclass is probably a member of gameclass (`gc+0x57d8`), and the key array is likely exactly 1000 bytes, since the next field (`0x3c464`) is at `0x3c07c + 0x3e8`.
 
-Other input storage seen in `superhex_generickeypoll.c` (observed offsets, inferred meaning):
+Other input storage in `superhex_generickeypoll.c` (observed offsets, inferred meaning):
 
 - `0x3c4fd + i`: controller button i held (loop of 0x1e at 539-541).
 - `0x3c6f8 + i`: controller d-pad, i = up, down, left, right (125-137).
@@ -31,13 +31,13 @@ Other input storage seen in `superhex_generickeypoll.c` (observed offsets, infer
 
 ## Per tick call order and the frame delta
 
-Observed (asm, `superhex::update` at `0x47a440`): `calculateTime` (call at `0x47a49e`), `helpclass::updateglow`, `gameinput` (call at `0x47a4ba`), `gamelogic` (call at `0x47a4c2`), `musicclass::processmusic`. There's no branch between them, so input and logic run once per rendered frame.
+Observed (asm, `superhex::update` at `0x47a440`): `calculateTime` (call at `0x47a49e`), `helpclass::updateglow`, `gameinput` (call at `0x47a4ba`), `gamelogic` (call at `0x47a4c2`), `musicclass::processmusic`. There's no branch between them.
 
-The step is _not_ a fixed 1.0. `superhex::calculateTime` (asm, `0x470c20`) rewrites the double at `superhex+0x28c0` every tick as the measured last frame time divided by 1/60 (constant at `0x55aca8`), rounded to one decimal by `oneRound` (`0x47c2f0`, multiply by 10, add 0.5, truncate, divide by 10). `update` clamps a frame time of two nominal frames or more back to nominal (`0x47a46f`), and a NaN, zero, or over 1 s frame also falls back to nominal. So `dt` sits around 1.0 at 60 fps and stays under 2.0. `gameclass::restart` seeds it from `getExpectedFrameDelta()` (`gameclass_restart.c` 38-40), whose default is 1.0f in `.data` at `0x7f48a8` (asm), but `calculateTime` overwrites it the next tick.
+The step is _not_ a fixed 1.0. `superhex::calculateTime` (asm, `0x470c20`) rewrites the double at `superhex+0x28c0` every tick as the measured last frame time divided by 1/60 (constant at `0x55aca8`), rounded to one decimal by `oneRound` (`0x47c2f0`, multiply by 10, add 0.5, truncate, divide by 10). `update` clamps a frame time of two nominal frames or more back to nominal (`0x47a46f`), and a NaN, zero, or over 1 s frame also falls back to nominal. So `dt` sits around 1.0 at 60 fps and stays under 2.0. `gameclass::restart` seeds it from `getExpectedFrameDelta()` (`gameclass_restart.c` 38-40), whose default is 1.0f in `.data` at `0x7f48a8` (asm), but `calculateTime` overwrites it the next tick. `NOTES-core.md` shows that the loop in `runAppViaInfiniteLoop` always hands `update` exactly one period.
 
-Inferred. A debugger stall shows up as one long frame, which clamps to nominal, so `dt` comes out 1.0 after a pause instead of a huge jump. For a deterministic env, write `1.0` to `superhex+0x28c0` at gameinput entry, since gameinput and gamelogic both read it after `calculateTime` has run.
+Inferred. For a deterministic env, write `1.0` to `superhex+0x28c0` at gameinput entry, since gameinput and gamelogic both read it after `calculateTime` has run.
 
-## Q1 rotation inputs
+## Rotation inputs
 
 ### Logical input flags
 
@@ -53,9 +53,9 @@ Inferred. A debugger stall shows up as one long frame, which clamps to nominal, 
 | `0x47` | back | Escape `0x1b` @`0x3c097` |
 | `0x48` | leaderboards | Tab `0x09` @`0x3c085` |
 
-Sources are generickeypoll.c 42-52 (left and right), 85-102 (the rest). The left and right byte offsets were checked against the disassembly of `generickeypoll` (asm, `0x46b786` through `0x46c48a`) and they match Ghidra.
+Sources are generickeypoll.c 42-52 (left and right), 85-102 (the rest). The left and right byte offsets match the disassembly of `generickeypoll` (asm, `0x46b786` through `0x46c48a`).
 
-So in ASCII the left group is Left, `A`, `a`, `0x15`, `f`, and the right group is Right, `D`, `d`, `L`, `l`, `0x16`, `g`. Up is Up, `W`, `w`. Down is Down, `S`, `t`. Select is `Z`, space, `V`, Enter. The uppercase entries only fire if the window layer delivers uppercase codes, and SDL keycodes for letters are lowercase. I don't know what produces `0x15` and `0x16`, and the `f`, `g`, and `t` entries look odd. None of that matters for a hook that uses the arrow codes `0x164` and `0x166`, which are unambiguous. Gameinput also reads `C`/`c` (`0x3c0bf`, `0x3c0df`, line 535) and Backspace (`0x3c084`, line 1327) directly.
+In ASCII the left group is Left, `A`, `a`, `0x15`, `f`, and the right group is Right, `D`, `d`, `L`, `l`, `0x16`, `g`. Up is Up, `W`, `w`. Down is Down, `S`, `t`. Select is `Z`, space, `V`, Enter. SDL keycodes for letters are lowercase, so the uppercase entries only fire if the window layer delivers uppercase codes. The arrow codes `0x164` and `0x166` are unambiguous. Gameinput also reads `C`/`c` (`0x3c0bf`, `0x3c0df`, line 535) and Backspace (`0x3c084`, line 1327) directly.
 
 When both left and right are held, the newer press wins. Observed: `0x3c074` and `0x3c078` count frames held for the left and right groups (-1 when released), and when both are set the smaller count wins (generickeypoll.c 53-84). The controller uses `0x3c708` and `0x3c70c` the same way (157-188), and touch uses `0x3c064` and `0x3c06c` (485-518).
 
@@ -67,7 +67,7 @@ Observed, generickeypoll.c 103-189, active when `this[0xb8]` (controller enabled
 - Right (`0x44`): button 5 (`0x3c502`), d-pad right (`0x3c6fb`), axis 1 above deadzone, axis 4 below minus deadzone.
 - Select: buttons 0, 3, 7. Back: buttons 1, 2. Tab: button 6. Up and down: d-pad up and down, axis 0.
 
-Mode 1 (190-471) is a custom mapping held as strings at `0x60`..`0x90` (prefix `b` for button, `p` for hat, `+` and `-` for axis) with indices at `0x98`..`0xb0`. Which physical buttons the indices mean depends on `flibitButtonMap`, which I didn't trace.
+Mode 1 (190-471) is a custom mapping held as strings at `0x60`..`0x90` (prefix `b` for button, `p` for hat, `+` and `-` for axis) with indices at `0x98`..`0xb0`, which depend on `flibitButtonMap`.
 
 ### Where movement happens
 
@@ -76,8 +76,6 @@ Observed, `superhex_gameinput.c` 227-299. It runs only when `*(float*)(this+0x10
 - `0x43` held: `angle = (int)(prevAngle + speed * dt)` and the int at `0x55a8` is set to 1 (lines 228-235).
 - `0x44` held: `angle = (int)(prevAngle - speed * dt)` and the int at `0x55a8` is set to -1 (237-244).
 - Then wrap into 0..359 (295-299).
-
-The fields involved are these (observed).
 
 | Field | superhex | gameclass | Type | Meaning |
 |---|---|---|---|---|
@@ -88,15 +86,15 @@ The fields involved are these (observed).
 | segment | `0x13c` | `gc+0x124` | int | angle / (360 / sides) |
 | sides | `0x114` | `gc+0xfc` | int | 6 by default |
 
-So positive rotation (angle increasing) is the left key. Speed is 7 for stage 0 and stage 1 and 9 for stage 2 (gameinput 1101, 1135, 1168), and `gameclass::changetostage` sets 9 or 7 when hyper stages change (`gameclass_changetostage.c` 46, 86). Gamelogic sets 4 on the level select screen (`superhex_gamelogic.c` 1749). The move is `speed * dt` degrees per tick, so it does depend on the frame delta double at `gc+0x28a8`.
+Positive rotation (angle increasing) is the left key. Speed is 7 for stage 0 and stage 1 and 9 for stage 2 (gameinput 1101, 1135, 1168), and `gameclass::changetostage` sets 9 or 7 when hyper stages change (`gameclass_changetostage.c` 46, 86). Gamelogic sets 4 on the level select screen (`superhex_gamelogic.c` 1749). The move is `speed * dt` degrees per tick.
 
 prevAngle is written by gamelogic at the end of the collision block: `*(int*)(this+0x28ec) = angle` (gamelogic 349). If the new angle runs into the side of a long wall, gamelogic puts the old angle back (`0x28f0 = 0x28ec`, line 329), which is the wall push back. Truncation to int means the left and right step can differ by one degree when `dt` isn't a whole number (inferred from the cast at gameinput 230 and 239, since `(int)(100 + 6.65)` is 106 but `(int)(100 - 6.65)` is 93).
 
-Two side effects (observed). The float `0x28fc` is a lean that follows the input and is clamped to +-10 (233, 242, 276-294). If `this[0x55a4]` is set and no key is held, the player keeps sliding in direction `0x55a8` until reaching the centre of a segment and then snaps (246-275). I didn't find where `0x55a4` gets set.
+Two side effects (observed). The float `0x28fc` is a lean that follows the input and is clamped to +-10 (233, 242, 276-294). If `this[0x55a4]` is set and no key is held, the player keeps sliding in direction `0x55a8` until reaching the centre of a segment and then snaps (246-275). `0x55a4` is set somewhere not found yet.
 
-Escape during a run (observed, 301-310): if `0x47` is set and `this[0x50]` is clear, it sets `*(float*)(this+0x28f8) = 2.0`, `this[0x50] = 1`, `this[0xbfb8] = 1`. That forces the death path in gamelogic and mutes the death sound (gamelogic 199-204).
+Escape during a run (observed, 301-310): if `0x47` is set and `this[0x50]` is clear, it sets `*(float*)(this+0x28f8) = 2.0`, `this[0x50] = 1`, `this[0xbfb8] = 1`, which forces the death path and mutes the death sound (gamelogic 199-204).
 
-## Q3 menu state machine
+## Menu state machine
 
 ### Main state fields
 
@@ -172,22 +170,17 @@ Inferred timing. `0x104` needs about 59 ticks to go from 1 to 60, and `0x10c` th
 
 Observed. The first start with `0x557c == 0` sets `this[0x5575] = 1` and `0x5578 = 0` (gameinput 1080-1089), which is the tutorial. Its phases run in gamelogic 1756-1822, and it waits for a left then right press through `0x5580` (gameinput 48-70). Phase 4 clears `0x5575`, sets `0x557c = 1`, and saves (gamelogic 1815-1821). While `0x5575` is set, death restarts automatically with no game over screen (gamelogic 294-303), and best time tracking is off (83). Inferred: an install that has already been played has `0x557c = 1` in the save.
 
-## Q4 injecting actions
+## Injecting actions
 
-### Recommended method
+Write the key array bytes before `gameinput` runs, `superhex+0x3c1e0` for Left (0x164) and `superhex+0x3c1e2` for Right (0x166), set to 1 for held and 0 for released. The reasons are below (observed unless marked).
 
-Write the key array bytes before `gameinput` runs: `superhex+0x3c1e0` for Left (0x164) and `superhex+0x3c1e2` for Right (0x166), set to 1 for held and 0 for released. The reasons are below (observed unless marked).
-
-- `generickeypoll` rebuilds `0x41`..`0x48` from the key array at the start of every gameinput, so writing `0x43` and `0x44` before gameinput gets overwritten. Writing them after `generickeypoll` returns would also work, but that needs a hook inside gameinput.
+- `generickeypoll` rebuilds `0x41`..`0x48` from the key array at the start of every gameinput, so writing `0x43` and `0x44` before gameinput gets overwritten.
 - The key array only changes in `keyPressed` and `keyReleased`, so a byte stays set until it's cleared. A real keyboard event for the same key will overwrite it, so don't press arrows on the real keyboard while the hook drives.
 - Gameplay rotation is level triggered. A held byte rotates every tick with no edge detection.
-- Set only one of the two bytes. If both are set, the press order counters at `0x3c074` and `0x3c078` decide the winner, and that would make a "both" action depend on history.
-- `gameinput` is at `0x46d200` (asm), and on entry `rdi` is the superhex pointer, which also gives the base without searching for the global. Writing `dt = 1.0` at `superhex+0x28c0` in the same place makes the step deterministic (inferred, see the frame delta section).
+- Set only one of the two bytes. If both are set, the press order counters at `0x3c074` and `0x3c078` decide the winner, which would make a "both" action depend on history.
+- `gameinput` is at `0x46d200` (asm), and on entry `rdi` is the superhex pointer. Writing `dt = 1.0` at `superhex+0x28c0` in the same place makes the step deterministic (inferred).
 
-### Alternatives
-
-- Synthesizing SDL events goes through the same `keyPressed` write, but adds the event queue and its timing relative to `update`. I didn't trace where `pollEvents` runs within a frame, so latency is unverified.
-- Writing the angle (`0x28f0`) directly skips the speed limit, the lean, and the side wall push back. That changes the game, so I'd keep it for resets or tests only. If used, write `0x28ec` to match, or gamelogic may treat the jump as a move.
+Writing the angle (`0x28f0`) directly skips the speed limit, the lean, and the side wall push back, so use it only for resets or tests, and write `0x28ec` to match. Synthesizing SDL events goes through the same `keyPressed` write, but its latency relative to `update` is unverified.
 
 ### Edge and latch logic that affects byte writes
 
@@ -196,7 +189,7 @@ Write the key array bytes before `gameinput` runs: `superhex+0x3c1e0` for Left (
 - Holding select or up through the game over screen restarts the run automatically as soon as `0x10c == 320`, since that path doesn't check `0x50` or edges. That's the simplest reset.
 - Escape held on the title screen exits the game, and select in title submenu 2 clears the saved scores. A hook should only ever send left, right, and select (or up), and only while `0x5424 >= 0` or `== -2`.
 
-## Q5 death detection
+## Death detection
 
 Observed, gamelogic 312-349 and 418-450.
 
@@ -213,5 +206,4 @@ Observed, gamelogic 312-349 and 418-450.
 ## Open items
 
 - Where `0x55a4` (snap to centre) and `0xc9` (start blocker) are set.
-- What produces key codes `0x15` and `0x16`, and whether the `f`, `g`, `t`, and uppercase entries are reachable on Linux. A runtime test with gdb watching the key array would settle it.
-- Exact `pollEvents` placement relative to `update`, which only matters for the SDL event method.
+- What produces key codes `0x15` and `0x16`, and whether the `f`, `g`, `t`, and uppercase entries are reachable on Linux.
