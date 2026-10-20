@@ -127,23 +127,73 @@ These causes were ruled out:
   the death timer. However, the early death rate was the same with and without the second read. The second read stays on, since it can only
   help.
 
-The recorded death at 5.48 s shows the policy making a bad choice in a tight opening. It waited
-until 0.04 s before a ring of walls arrived, moved right into the gap and kept going, and then
-held right for 13 decisions while pinned at the edge of its slot, with the only gap three slots
-away. The observations and keys look normal throughout.
+At the time, the recorded death at 5.48 s looked like a bad choice by the policy, since it held right
+for 13 decisions while its angle didn't change. The next section shows what really happened.
 
-Why openings like that come up live and not in the simulator is still open. Two deaths repeated
-exactly in separate games, 3.82 s with 111 decisions twice and 5.48 s with 161 decisions twice, so
-live openings seem to come from a small set that includes a few the policy can't handle. The next
-step is to reseed the live game's random generator at the level start through `/proc/<pid>/mem`,
-so a live run and a simulator run share a seed and can be compared tick by tick until they part.
+## Why live runs died early
 
-### What it means for showing it off
+The cause turned out to be keyboard focus, not the model or the openings. When a game window
+gains or loses focus, SDL releases every key it thinks is held. The live player only sent a key
+press when its action changed, so after a focus change the game had let go of the key while the
+player still meant to hold it, and the player drifted into a wall. Focus moves whenever a window
+opens or closes (every relaunch) and whenever someone clicks around the desktop.
 
-The policy plays the real game live, in real time, with real key events, and nothing measured so
-far separates it from lockstep on Hexagon through Hyper Hexagoner. On Hyper Hexagonest about one
-opening in ten ends early, always within the first 15 s, and every run that got past that has
-reached its cap so far. Restarting after a quick death is enough for a demo.
+These were ruled out first, each with a test that could have failed:
+
+- How a level starts. `hook/shxcore.h` gained reset flags that keep the random state and the
+  player's angle, and one that stops at level select so the levels can be browsed with real key
+  presses first. Starts made the live way died early in 0 to 1 of 300 openings per test in the
+  simulator, and in 0 of 60 per level in the real game in lockstep, the same as normal starts.
+- Late keys. The movement right after a fresh key press was a full step in all 233 live presses
+  measured, the same as in the simulator.
+- Drawing. A lockstep game that drew a frame after every step matched a headless one exactly for
+  four 30 s episodes.
+- The live player's own parsing. Its observation matched the C one in all 16,200 lockstep steps
+  checked across the six levels.
+
+What settled it was replaying live games in the simulator. With `--record`, `play_live.py` now
+captures the whole game state, the hook's random number state, and the memory map at the first
+decision of each episode, and `scripts/replay_capture.py` loads that into the simulator
+(`shxSimSetRandom` sets its random state), replays the live actions, and compares every
+observation. Of 60 captured live episodes on Hyper Hexagonest and Hexagoner, all 55 that survived
+matched the simulator at every decision. All 5 early deaths stopped matching at one decision, in
+each case while the same key had been held for at least four decisions, and in each one the policy
+on its own survived the full 15 s from the same captured start in the simulator. Replaying that
+decision with the held key let go, from its start or one tick in, matched the live game exactly in
+all 5.
+
+A direct test confirmed it. With two game windows, holding a key in one and moving focus to the
+other turned that game's key array from held to released, both ways round. Synthetic focus events
+sent straight to a window did the same, which allowed a stress test without moving the desktop's
+real focus.
+
+The fix is in `play_live.py`. On every poll it compares the game's key array with the key it means
+to hold, and presses the key again when the game has dropped it. With a focus event sent to both
+windows every 0.5 to 3 s, the fixed player reached the 30 s cap in 19 of 20 Hyper Hexagonest
+episodes (pressing a dropped key again 3,283 times), while the old player reached it in none of
+20, dying between 3.32 and 18.23 s. Several of the old player's death times (3.82, 4.32, and
+4.98 s) are the same as live early deaths seen before the fix.
+
+Under normal use the fix held as well. Hyper Hexagonest with a fresh game every episode reached
+the 15 s cap in 18 of 18 runs, and Hexagoner in one game reached it in 30 of 30, where the same
+setups had died early in 4 of 30 and 1 of 30 before. The player pressed a dropped key again 29 and
+58 times, mostly when the other window relaunched, so focus changes are common in everyday use.
+Three of those 48 runs drifted from the simulator replay by a tick where a key came back late, and
+all three survived.
+
+A new game window takes keyboard focus when it opens, so typing elsewhere while live runs start
+can send keys into the game. One run met its title screen with the cursor moved off the first
+entry, likely from that. The player now starts a fresh game when it finds the title screen like
+that, as it does for a stuck menu walk.
+
+## Menu walk stalls
+
+Twice, with two games started at the same moment, the menu walk gave up after 60 s without seeing
+the level start, even though one of the games had started it. The game's app pointer is set once
+about 0.2 s after launch and doesn't change, so a stale object isn't the reason, and 24 later menu
+walks in three pairs of runs started together didn't stall. The cause isn't known yet. The player now
+starts a fresh game and tries once more when it happens, and `SHX_LIVE_DEBUG=1` logs every menu
+state and key press so the next stall can be read.
 
 ## Recording a demo
 

@@ -19,7 +19,8 @@ import numpy as np
 import torch
 
 from shxenv import build_observation
-from shxgame import GAME_DIR, HOOK_PATH, TEMPLATE_DIR, check_game_binary
+from shxgame import GAME_DIR, HOOK_PATH, SUPERHEX_SIZE, TEMPLATE_DIR, check_game_binary
+from shxsim import game_pointer_ranges
 from train_ppo import Agent
 
 LEVEL_NAMES = ["Hexagon", "Hexagoner", "Hexagonest", "Hyper Hexagon", "Hyper Hexagoner", "Hyper Hexagonest"]
@@ -48,6 +49,7 @@ OFF_STAGE_CHANGE_A = 0x55DC
 OFF_STAGE_CHANGE_B = 0x55E4
 OFF_TITLE_CURSOR = 0xBFC0
 OFF_KEYS = 0x3C07C
+OFF_ELAPSED_MILLIS = 0x3C710
 KEY_LEFT = 0x164
 KEY_RIGHT = 0x166
 BLOCK_SIZE = 0x55E8
@@ -136,6 +138,8 @@ class GameWindowKeys:
         self.x11.XFlush(self.display)
 
     def tap(self, keysym, hold=0.06, gap=0.06):
+        if os.environ.get("SHX_LIVE_DEBUG"):
+            print(f"    tap {hex(keysym)} at {time.monotonic():.2f}", flush=True)
         self.send(keysym, True)
         time.sleep(hold)
         self.send(keysym, False)
@@ -214,6 +218,39 @@ class GameMemory:
             stage_change_a=i32(OFF_STAGE_CHANGE_A), stage_change_b=i32(OFF_STAGE_CHANGE_B),
             walls=walls, wall_count=len(walls))
 
+    # Everything needed to continue this exact game in the simulator: the whole superhex object,
+    # the hook's random number state, and the memory map for pointer replacement. Read between
+    # ticks, and again until two reads agree.
+    def capture(self):
+        if not hasattr(self, "rand_offsets"):
+            symbols = subprocess.run(["nm", "--defined-only", str(HOOK_PATH)], capture_output=True, text=True).stdout
+            found = {line.split()[2]: int(line.split()[0], 16) for line in symbols.splitlines()
+                     if len(line.split()) == 3 and line.split()[2] in ("randState", "randData")}
+            base = None
+            for line in Path(f"/proc/{self.pid}/maps").read_text().splitlines():
+                fields = line.split()
+                if len(fields) > 5 and fields[5].endswith("shxhook.so") and int(fields[2], 16) == 0:
+                    base = int(fields[0].split("-")[0], 16)
+                    break
+            if base is None or len(found) != 2:
+                raise RuntimeError("couldn't find the hook's random state")
+            self.rand_offsets = (base + found["randState"], base + found["randData"])
+        state_address, data_address = self.rand_offsets
+        for _ in range(100):
+            before = self.run_time()
+            full = self.read(self.app, SUPERHEX_SIZE)
+            rand_state = self.read(state_address, 128)
+            rand_data = self.read(data_address, 24)
+            again = self.read(self.app, SUPERHEX_SIZE)
+            if before == self.run_time() and full == again:
+                front, rear, state = struct.unpack("<QQQ", rand_data)
+                millis = struct.unpack_from("<Q", full, OFF_ELAPSED_MILLIS)[0]
+                return {"state": np.frombuffer(full, np.uint8), "rand_state": np.frombuffer(rand_state, np.uint8),
+                        "rand_front": (front - state) // 4, "rand_rear": (rear - state) // 4,
+                        "ranges": game_pointer_ranges(self.pid), "tick": millis * 60 // 1000}
+            time.sleep(0.0002)
+        raise RuntimeError("couldn't capture a steady game state")
+
     def title_cursor(self):
         return struct.unpack("<i", self.read(self.app + OFF_TITLE_CURSOR, 4))[0]
 
@@ -280,12 +317,25 @@ class EndingReached(Exception):
     pass
 
 
+class MenuStuck(RuntimeError):
+    pass
+
+
 # Walks the game's menus to the level with real key presses, the way shxRunReset in
 # hook/shxcore.h does with key state, except that the level select cursor moves by pressing right.
 def go_to_level(memory, keys, level, timeout=60.0):
     deadline = time.monotonic() + timeout
+    started_one = False
+    seen = None
     while time.monotonic() < deadline:
         s = memory.state()
+        if os.environ.get("SHX_LIVE_DEBUG"):
+            now = (s.stage, s.level_cursor, s.latch, s.title_submenu, s.death_timer > 0, s.camera, s.level_message,
+                   memory.title_cursor())
+            if now != seen:
+                print(f"    menu {time.monotonic():.2f}: stage {now[0]} cursor {now[1]} latch {now[2]} submenu {now[3]} "
+                      f"dead {now[4]} camera {now[5]} message {now[6]} title cursor {now[7]}", flush=True)
+                seen = now
         if s.stage == STAGE_ENDING or s.level_message == LEVEL_MESSAGE_ENDING:
             raise EndingReached()
         if s.latch:
@@ -296,13 +346,15 @@ def go_to_level(memory, keys, level, timeout=60.0):
                 keys.tap(XK_RIGHT)
                 continue
             keys.tap(XK_RETURN)
+            started_one = True
             started = wait_until(lambda: memory.state().stage >= 0 and memory.state().death_timer == 0, 3.0)
             if started:
                 return
             continue
         if s.stage == STAGE_TITLE:
             if s.title_submenu != 0 or memory.title_cursor() != 0:
-                raise RuntimeError("the title screen isn't on its first entry, refusing to press select there")
+                # select on another entry could change settings or quit, so start over instead
+                raise MenuStuck("the title screen isn't on its first entry")
             keys.tap(XK_RETURN)
             continue
         if s.stage >= 0:
@@ -317,15 +369,18 @@ def go_to_level(memory, keys, level, timeout=60.0):
             if dead and (held or s.camera != GAME_OVER_CAMERA):
                 time.sleep(0.05)
                 continue
+            # a busy machine can start the run after the wait above gave up, and that's ours
+            if not dead and started_one and s.run_time < 120:
+                return
             keys.tap(XK_ESCAPE)
             continue
         time.sleep(0.05)
-    raise RuntimeError(f"didn't reach level {level} within {timeout:.0f} s")
+    raise MenuStuck(f"didn't reach level {level} within {timeout:.0f} s")
 
 
 # Plays one run in real time. A decision comes every second tick, like training, and each key
 # change is followed in memory to see which tick it reached the game on.
-def play_episode(memory, keys, agent, level, max_seconds, poll, double_read, record=None):
+def play_episode(memory, keys, agent, level, max_seconds, poll, double_read, record=None, capture=None):
     action_keys = {1: XK_LEFT, 2: XK_RIGHT}
     last_action = 0
     first = memory.state()
@@ -339,6 +394,7 @@ def play_episode(memory, keys, agent, level, max_seconds, poll, double_read, rec
     waiting = None
     decisions = 0
     torn = 0
+    restored = 0
     last_rt = start
     odd_since = None
     try:
@@ -362,6 +418,13 @@ def play_episode(memory, keys, agent, level, max_seconds, poll, double_read, rec
                 if memory.keys() == want:
                     lateness.append(max(rt - sent_at - 1, 0.0))
                     waiting = None
+            # SDL releases every key when the window gains or loses focus, so a held key can vanish
+            # from the game while the player still means to hold it. Press it again when that
+            # happens (a press still on its way gets two ticks first).
+            if last_action and (waiting is None or rt - waiting[1] >= 2):
+                if memory.keys() != (int(last_action == 1), int(last_action == 2)):
+                    keys.send(action_keys[last_action], True)
+                    restored += 1
             # the run time stops once the player dies, so a death can come between decisions
             if rt < next_decision and memory.death_timer() <= 0:
                 time.sleep(poll)
@@ -377,10 +440,15 @@ def play_episode(memory, keys, agent, level, max_seconds, poll, double_read, rec
             s = memory.parse(raw)
             if s.run_time != rt or memory.run_time() != rt:
                 continue
+            # the first decision uses the captured state itself, so a replay starts from it exactly
+            if capture is not None and not capture:
+                capture.update(memory.capture())
+                s = memory.parse(capture["state"][:BLOCK_SIZE].tobytes())
+                rt = last_rt = s.run_time
             if s.death_timer > 0 or s.stage < 0:
-                return s.run_time / 60, False, lateness, skipped, decisions, torn
+                return s.run_time / 60, False, lateness, skipped, decisions, torn, restored
             if s.run_time >= cap:
-                return s.run_time / 60, True, lateness, skipped, decisions, torn
+                return s.run_time / 60, True, lateness, skipped, decisions, torn, restored
             if s.run_time > next_decision + 0.5:
                 skipped += 1
                 print(f"    decision at run time {s.run_time:.1f}, expected {next_decision:.1f}, "
@@ -477,23 +545,31 @@ def main():
                     stop_game()
                     start_game()
                     go_to_level(memory, keys, level)
+                except MenuStuck as error:
+                    # seen twice with two games starting at once, and not understood yet, so start a
+                    # fresh game and try once more (SHX_LIVE_DEBUG=1 logs the menu walk)
+                    print(f"    {error}, starting a fresh game", flush=True)
+                    stop_game()
+                    start_game()
+                    go_to_level(memory, keys, level)
                 record = [] if args.record else None
-                seconds, capped, lateness, skipped, decisions, torn = play_episode(
+                capture = {} if args.record else None
+                seconds, capped, lateness, skipped, decisions, torn, restored = play_episode(
                     memory, keys, agent, level, args.max_seconds, args.poll_ms / 1000, not args.single_read,
-                    record)
+                    record, capture)
                 if record:
                     out = Path(args.record) / f"level{level}-episode{episode + 1:02d}.npz"
                     out.parent.mkdir(parents=True, exist_ok=True)
                     np.savez(out, run_time=np.array([r[0] for r in record]),
                              action=np.array([r[1] for r in record]), obs=np.stack([r[2] for r in record]),
-                             seconds=seconds)
+                             seconds=seconds, level=level, **capture)
                 all_lateness.extend(lateness)
                 on_time = sum(1 for t in lateness if t < 0.5)
                 results.append((seconds, capped))
                 print(f"  {LEVEL_NAMES[level]} episode {episode + 1}: {seconds:.2f}s"
                       f"{' (hit the cap)' if capped else ''}, key changes {len(lateness)}, "
                       f"on the next tick {on_time}, late {len(lateness) - on_time}, "
-                      f"decisions {decisions}, decision ticks missed {skipped}, torn snapshots {torn}", flush=True)
+                      f"decisions {decisions}, decision ticks missed {skipped}, torn snapshots {torn}, keys pressed again {restored}", flush=True)
             seconds = np.array([r[0] for r in results])
             capped = sum(r[1] for r in results)
             print(f"{LEVEL_NAMES[level]:17} {len(results)} episodes: mean {seconds.mean():6.2f}s "

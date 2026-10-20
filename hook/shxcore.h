@@ -130,7 +130,7 @@ static int shxRunDecision(ShxCore *c, int keys, int frameSkip)
 // Walks the game's own menus to level select, then reseeds rand and starts the level. Escape is
 // only sent during a run, since on the title screen it quits the game. Every press is followed
 // by a tick with no keys, because most menu presses set a latch that ignores input until then.
-static int shxRunReset(ShxCore *c, int level, uint32_t seed, int *ticksOut)
+static int shxRunReset(ShxCore *c, int level, uint32_t seed, int flags, int *ticksOut)
 {
 	uint8_t *app = c->app;
 	*ticksOut = 0;
@@ -155,14 +155,20 @@ static int shxRunReset(ShxCore *c, int level, uint32_t seed, int *ticksOut)
 		}
 
 		if (stage == STAGE_LEVEL_SELECT) {
+			if (flags & SHX_RESET_STOP_AT_SELECT)
+				return SHX_ERR_NONE;
 			FIELD(int32_t, app, OFF_LEVEL_CURSOR) = shxLevelCursor[level];
 			// a run keeps the angle the menu left the player at, which depends on the last level
-			// played, so start every run from the angle gameclass::start uses
-			int sides = FIELD(int32_t, app, OFF_SIDES);
-			int startAngle = sides > 0 ? 180 / sides : 30;
-			FIELD(int32_t, app, OFF_PLAYER_ANGLE) = startAngle;
-			FIELD(int32_t, app, OFF_PREVIOUS_ANGLE) = startAngle;
-			c->reseed(c, seed);
+			// played, so start every run from the angle gameclass::start uses, unless asked to
+			// start the way a live game does
+			if (!(flags & SHX_RESET_KEEP_ANGLE)) {
+				int sides = FIELD(int32_t, app, OFF_SIDES);
+				int startAngle = sides > 0 ? 180 / sides : 30;
+				FIELD(int32_t, app, OFF_PLAYER_ANGLE) = startAngle;
+				FIELD(int32_t, app, OFF_PREVIOUS_ANGLE) = startAngle;
+			}
+			if (!(flags & SHX_RESET_KEEP_RANDOM))
+				c->reseed(c, seed);
 			shxRunTick(c, SHX_KEY_SELECT, false);
 			bool started = FIELD(int32_t, app, OFF_STAGE) >= 0 && FIELD(float, app, OFF_DEATH_TIMER) == 0.0f;
 			if (!started) {
@@ -371,7 +377,7 @@ static bool shxHandleCommand(ShxCore *c, ShxShared *sh, int *error, int *ticksRu
 	if (command != SHX_CMD_RESET && command != SHX_CMD_REPLAY)
 		return false;
 
-	*error = shxRunReset(c, sh->level, sh->seed, resetTicks);
+	*error = shxRunReset(c, sh->level, sh->seed, sh->resetFlags, resetTicks);
 	if (*error == SHX_ERR_NONE) {
 		c->level = sh->level;
 		c->lastAction = 0;

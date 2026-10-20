@@ -29,6 +29,7 @@ extern __thread ShxSim *simCurrent;
 
 ShxSim *shxSimCreate(const uint8_t *state, size_t size, uint64_t tickAtDump, uint32_t seed, const uint64_t *ranges,
 	int rangeCount);
+int shxSimSetRandom(ShxSim *sim, const char *state, int size, int frontIndex, int rearIndex);
 void shxSimDestroy(ShxSim *sim);
 ShxShared *shxSimShared(ShxSim *sim);
 const uint8_t *shxSimState(ShxSim *sim);

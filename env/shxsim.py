@@ -28,6 +28,8 @@ if SIM_PATH.is_file():
         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int,
     ]
     sim_lib.shxSimBatchStep.restype = ctypes.c_int
+    sim_lib.shxSimSetRandom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+    sim_lib.shxSimSetRandom.restype = ctypes.c_int
 
 
 def default_state_path():
@@ -100,8 +102,8 @@ class ShxSim:
         except GameError as error:
             self._pending_error = error
 
-    def post_reset(self, level=0, seed=1, render=False):
-        self._post(lambda: self.reset(level, seed))
+    def post_reset(self, level=0, seed=1, render=False, flags=0):
+        self._post(lambda: self.reset(level, seed, flags=flags))
 
     def post_replay(self, level, seed, actions, frame_skip):
         self._post(lambda: self.replay(level, seed, actions, frame_skip))
@@ -119,11 +121,12 @@ class ShxSim:
         sh.frame_skip = frame_skip
         return self._run()
 
-    def reset(self, level=0, seed=1, render=False):
+    def reset(self, level=0, seed=1, render=False, flags=0):
         sh = self.shared
         sh.command = CMD_RESET
         sh.level = level
         sh.seed = seed
+        sh.reset_flags = flags
         return self._run()
 
     def replay(self, level, seed, actions, frame_skip):
@@ -133,10 +136,16 @@ class ShxSim:
         sh.command = CMD_REPLAY
         sh.level = level
         sh.seed = seed
+        sh.reset_flags = 0
         sh.frame_skip = frame_skip
         sh.replay_count = len(actions)
         ctypes.memmove(ctypes.addressof(sh.replay_actions), bytes(actions), len(actions))
         return self._run()
+
+    # continues from a live game's random number state (see scripts/play_live.py --record)
+    def set_random(self, state, front, rear):
+        if sim_lib.shxSimSetRandom(self.handle, bytes(state), len(state), front, rear) != 0:
+            raise GameError("random state doesn't fit the simulator")
 
     # byte offsets of the pointers replaced on load, which never match the real game's dump
     def pointer_offsets(self):

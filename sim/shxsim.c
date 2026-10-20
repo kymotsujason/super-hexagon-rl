@@ -117,6 +117,20 @@ EXPORT ShxSim *shxSimCreate(const uint8_t *state, size_t size, uint64_t tickAtDu
 	return sim;
 }
 
+// Puts in a random number state taken from a live game (the hook's 128 byte state buffer and its
+// two read positions), so a captured live game can continue in the simulator.
+EXPORT int shxSimSetRandom(ShxSim *sim, const char *state, int size, int frontIndex, int rearIndex)
+{
+	int degree = sim->randData.rand_deg;
+	if (size != (int)sizeof(sim->randState) || frontIndex < 0 || frontIndex >= degree
+		|| rearIndex < 0 || rearIndex >= degree)
+		return -1;
+	memcpy(sim->randState, state, sizeof(sim->randState));
+	sim->randData.fptr = sim->randData.state + frontIndex;
+	sim->randData.rptr = sim->randData.state + rearIndex;
+	return 0;
+}
+
 EXPORT void shxSimDestroy(ShxSim *sim)
 {
 	free(sim);

@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 #define SHX_MAGIC 0x31584853u
-#define SHX_PROTO_VERSION 4
+#define SHX_PROTO_VERSION 5
 #define SHX_MAX_WALLS 256
 #define SHX_MAX_REPLAY 32768
 
@@ -25,6 +25,14 @@ enum {
 	SHX_CMD_RESET = 3,
 	SHX_CMD_REPLAY = 4,
 	SHX_CMD_DUMP = 5,
+};
+
+// reset flags, for starting a level the way a live game does instead of from a clean state
+enum {
+	SHX_RESET_KEEP_RANDOM = 1,
+	SHX_RESET_KEEP_ANGLE = 2,
+	// walk to level select and stop there, so a client can browse the levels before starting
+	SHX_RESET_STOP_AT_SELECT = 4,
 };
 
 enum {
@@ -82,7 +90,7 @@ typedef struct {
 	int32_t level;
 	uint32_t seed;
 	int32_t replayCount;
-	int32_t pad1;
+	int32_t resetFlags;
 
 	// result, written by the hook before posting resultReady
 	uint64_t tick;

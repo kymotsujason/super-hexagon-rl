@@ -19,7 +19,7 @@ SYSTEM_SDL2 = Path("/usr/lib/libSDL2-2.0.so.0")
 EXPECTED_SHA256 = "6f13c58d136b84df212cc23a560f7383e2f689005af18072e51d8a7439d2ba1d"
 
 SHX_MAGIC = 0x31584853
-SHX_PROTO_VERSION = 4
+SHX_PROTO_VERSION = 5
 SHX_MAX_WALLS = 256
 SHX_MAX_REPLAY = 32768
 OBS_SIZE = 45
@@ -80,7 +80,7 @@ class ShxShared(ctypes.Structure):
         ("level", ctypes.c_int32),
         ("seed", ctypes.c_uint32),
         ("replay_count", ctypes.c_int32),
-        ("pad1", ctypes.c_int32),
+        ("reset_flags", ctypes.c_int32),
         ("tick", ctypes.c_uint64),
         ("hook_ready", ctypes.c_int32),
         ("error", ctypes.c_int32),
@@ -247,11 +247,12 @@ class ShxGame:
         sh.render = 1 if render else 0
         libc.sem_post(self._command_sem)
 
-    def post_reset(self, level=LEVEL_HEXAGON, seed=1, render=False):
+    def post_reset(self, level=LEVEL_HEXAGON, seed=1, render=False, flags=0):
         sh = self.shared
         sh.command = CMD_RESET
         sh.level = level
         sh.seed = seed
+        sh.reset_flags = flags
         sh.render = 1 if render else 0
         libc.sem_post(self._command_sem)
 
@@ -263,6 +264,7 @@ class ShxGame:
         sh.command = CMD_REPLAY
         sh.level = level
         sh.seed = seed
+        sh.reset_flags = 0
         sh.frame_skip = frame_skip
         sh.render = 0
         sh.replay_count = len(actions)
@@ -281,8 +283,8 @@ class ShxGame:
         return self.wait()
 
     # walks the menus to the level, reseeds rand right before it starts, and returns the first state
-    def reset(self, level=LEVEL_HEXAGON, seed=1, render=False):
-        self.post_reset(level, seed, render)
+    def reset(self, level=LEVEL_HEXAGON, seed=1, render=False, flags=0):
+        self.post_reset(level, seed, render, flags)
         return self.wait()
 
     # the whole superhex object as bytes, for checking the simulator against the game
