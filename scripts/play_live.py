@@ -2,6 +2,7 @@ import argparse
 import ctypes
 import os
 import random
+import re
 import shutil
 import struct
 import subprocess
@@ -222,13 +223,21 @@ class GameMemory:
 
 # The real game with the hook only faking Steam: without SHX_SHM the hook never takes over the
 # loop, so the game runs on its own real time clock and reads real key events.
-def launch_game(instance_dir, sound):
+def launch_game(instance_dir, volume):
     check_game_binary()
     instance_dir = Path(instance_dir).resolve()
     save_dir = instance_dir / "data" / "SuperHexagon"
     save_dir.mkdir(parents=True, exist_ok=True)
     for template_file in TEMPLATE_DIR.iterdir():
         shutil.copyfile(template_file, save_dir / template_file.name)
+    # the template save turns sound off and both volumes to 0 for training, so the game stays
+    # silent even with a real audio driver unless its own settings say otherwise
+    if volume is not None:
+        settings = save_dir / "settings.dat"
+        text = settings.read_text()
+        for name, value in (("soundenabled", 1), ("musicvolume", volume), ("soundvolume", volume)):
+            text = re.sub(rf"<{name}>[^<]*</{name}>", f"<{name}>{value}</{name}>", text)
+        settings.write_text(text)
     env = dict(os.environ)
     env.update({
         "LD_PRELOAD": str(HOOK_PATH),
@@ -238,7 +247,7 @@ def launch_game(instance_dir, sound):
         "SDL_VIDEODRIVER": "x11",
     })
     env.pop("SHX_SHM", None)
-    if not sound:
+    if volume is None:
         env["SDL_AUDIODRIVER"] = "dummy"
     log = open(instance_dir / "game.log", "wb")
     process = subprocess.Popen(["./SuperHexagon"], cwd=GAME_DIR, env=env, stdin=subprocess.DEVNULL,
@@ -403,7 +412,8 @@ def main():
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--max-seconds", type=float, default=600.0)
     parser.add_argument("--instance", default=str(PROJECT_DIR / "runs" / "live" / "instance"))
-    parser.add_argument("--sound", action="store_true", help="play the game's music")
+    parser.add_argument("--sound", type=int, nargs="?", const=10, default=None, choices=range(11),
+                        metavar="VOLUME", help="play the music and sound effects, at a volume from 0 to 10 (10 if left out)")
     parser.add_argument("--poll-ms", type=float, default=0.5, help="how often to check the game's tick")
     parser.add_argument("--single-read", action="store_true",
                         help="take each snapshot once, without checking it against a second copy")

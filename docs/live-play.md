@@ -30,7 +30,9 @@ real speed. The game's own loop then accumulates real time and runs an update fo
 cd ~/Documents/super-hexagon; .venv/bin/python scripts/play_live.py models/smooth-hold-ema.pt --levels 1 --episodes 1 --max-seconds 120
 ```
 
-`--sound` turns the music on, and `--place <X> <Y> <WIDTH> <HEIGHT>` moves the window.
+`--sound` turns the music and sound effects on at full volume, and `--sound <VOLUME>` sets a
+volume from 0 to 10 instead (put it after the model path). `--place <X> <Y> <WIDTH> <HEIGHT>` moves
+the window.
 `--relaunch-each` starts a fresh game for every episode, `--record <DIR>` saves each episode's
 observations and actions, and `--single-read` turns off the second snapshot read.
 

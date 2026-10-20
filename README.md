@@ -91,7 +91,8 @@ Watch a model play a minute of Hexagoner in a window, in lockstep:
 .venv/bin/python scripts/eval_policy.py models/smooth-hold-ema.pt --watch --levels 1 --episodes 1 --max-seconds 60
 ```
 
-Play live, with the game on its own clock (`--sound` turns the music on):
+Play live, with the game on its own clock (add `--sound` for music and sound effects at full volume,
+or `--sound 2` for a volume of 2 out of 10):
 
 ```bash
 .venv/bin/python scripts/play_live.py models/smooth-hold-ema.pt --levels 1 --episodes 1 --max-seconds 120
