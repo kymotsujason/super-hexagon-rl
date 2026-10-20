@@ -4,7 +4,7 @@ A self learning agent for Super Hexagon. It reads the game's state from memory, 
 a C simulator compiled from the game's own logic, and plays the real game in real time with real
 key presses.
 
-[![Six live games, one per level, played by the agent](docs/live-grid.png)](https://youtu.be/_lxDK-jy9rA)
+[![The agent playing Hyper Hexagoner live](docs/hero-loop.webp)](https://youtu.be/_lxDK-jy9rA)
 
 Watch it play all six levels live and unedited [on YouTube](https://youtu.be/_lxDK-jy9rA) (7 min).
 

@@ -104,6 +104,8 @@ together didn't stall. The player now starts a fresh game and tries once more.
 
 ## Results
 
+![Six live games, one per level, played by the agent](live-grid.png)
+
 With six windows at once, one per level, each capped at 600 s, the player reached the cap in all
 15 runs on the five lower levels and 7 of 10 on Hyper Hexagonest, before the focus fix. Lockstep
 reaches it in 112 to 119 of 120 per level over six seed sets.
